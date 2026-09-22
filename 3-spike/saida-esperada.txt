@@ -1,0 +1,30 @@
+========================================================================
+SPIKE — ADR-003: Lock Distribuido + ACL + Outbox Transacional
+Caso Saude / Envelope C — Grupo 05
+========================================================================
+
+[Cenario A] Duas unidades disputam o LEITO-101 SEM lock distribuido
+  - UPA-Sul: CONFIRMADA
+  - Hospital-Central: CONFIRMADA
+  Reservas confirmadas para o mesmo leito: 2
+  RESULTADO: OVERBOOKING CONFIRMADO (defeito que o ADR-003 corrige)
+
+[Cenario B] Mesma disputa, agora COM DistributedLockManager (Redlock)
+  - UPA-Sul: CONFIRMADA
+  - Hospital-Central: RECUSADA (lock ja adquirido por outra unidade)
+  Reservas confirmadas para o mesmo leito: 1
+  RESULTADO: OVERBOOKING EVITADO — apenas uma unidade reservou o leito
+
+[Cenario C] TransactionalOutboxHandler sincronizando com legado instavel
+  - tentativa 1: falhou (legado indisponivel para LEITO-205 (tentativas restantes de falha: 2))
+  - tentativa 2: falhou (legado indisponivel para LEITO-205 (tentativas restantes de falha: 1))
+  - tentativa 3: sucesso
+  Estado final do registro de Outbox: {'leito_id': 'LEITO-205', 'paciente_id': 'PACIENTE-09', 'sincronizado': True, 'tentativas': 3}
+  RESULTADO: reserva local preservada e sincronizada apos retentativas
+
+========================================================================
+RESUMO
+========================================================================
+Cenario A (sem lock)  -> reservas confirmadas no mesmo leito: 2 (OVERBOOKING)
+Cenario B (com lock)  -> reservas confirmadas no mesmo leito: 1 (OK — sem overbooking)
+Cenario C (outbox)    -> sincronizado apos 3 tentativa(s): True

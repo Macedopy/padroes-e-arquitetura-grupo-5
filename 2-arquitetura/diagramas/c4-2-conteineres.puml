@@ -1,0 +1,30 @@
+@startuml C4_Nivel2_Conteineres
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+TITLE Diagrama de Contêineres (Nível 2) - Monólito Modular e Componentes
+
+Person(usuario, "Usuários do Sistema", "Profissionais de Saúde, Reguladores e Cidadãos.")
+
+System_Boundary(sb_saude, "Sistema Municipal de Saúde (On-Premises)") {
+    Container(web_app, "Web App / PWA", "React / Single Page App", "Interface web acessível por navegadores e dispositivos móveis nas UPAs/UBSs.")
+    Container(monolith, "Monólito Modular (API Core)", "Java / Spring Boot", "Aplicação central contendo os módulos de Atendimento, PEC, Agendamento, Leitos, Vigilância e Farmácia.")
+
+    ContainerDb(db_postgres, "Banco de Dados Principal", "PostgreSQL", "Armazena dados transacionais, cadastros, agendamentos, tabela Append-Only de auditoria do PEC e tabelas de Outbox (leitos e vigilância).")
+    ContainerDb(redis, "Cache & Distributed Lock", "Redis", "Gestão de quotas de agendamento em memória e lock distribuído para reserva de leitos.")
+    Container(rabbitmq, "Message Broker", "RabbitMQ", "Fila de mensagens para comunicação assíncrona entre UPAs, eventos da Vigilância e tarefas em background.")
+}
+
+System_Ext(legado_leitos, "Sistema Legado de Leitos", "Sistema legado de regulação de leitos.")
+System_Ext(e_sus, "e-SUS / CADSUS", "Serviços do Governo Federal.")
+
+Rel(usuario, web_app, "Acessa", "HTTPS · chamada síncrona")
+Rel(web_app, monolith, "Consome endpoints da API", "JSON / HTTPS · chamada síncrona")
+
+Rel(monolith, db_postgres, "Lê e escreve dados", "JDBC / Port 5432 · chamada síncrona")
+Rel(monolith, redis, "Verifica saldo de cotas e adquire locks", "RESP / Port 6379 · chamada síncrona")
+Rel(monolith, rabbitmq, "Publica e consome eventos de atendimento, vigilância e auditoria", "AMQP / Port 5672 · evento / fila")
+
+Rel(monolith, legado_leitos, "Integração via ACL e Lock Distribuído", "HTTPS / DB Link · chamada síncrona")
+Rel(monolith, e_sus, "Envia notificações compulsórias e cadastros via Outbox + Circuit Breaker", "REST / SOAP · chamada assíncrona resiliente")
+
+@enduml

@@ -1,0 +1,27 @@
+@startuml C4_Nivel3_Componentes_Legado
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+TITLE Diagrama de Componentes (Nível 3) - Módulo de Regulação de Leitos & Integração Legado
+
+Container_Boundary(monolith, "Monólito Modular - Módulo de Regulação de Leitos") {
+    Component(leitos_controller, "BedRegulationController", "Spring REST Controller", "Recebe requisições de alocação, consulta e transferência de leitos.")
+    Component(leitos_service, "BedRegulationService", "Spring Service", "Contém a regra de negócio do novo sistema para regulação de leitos.")
+    Component(lock_manager, "DistributedLockManager", "Redis Component", "Garante o lock exclusivo por leito no Redis para evitar dupla reserva simultânea.")
+    Component(acl_adapter, "LegacyBedSystemAdapter (ACL)", "Ports & Adapters / ACL", "Traduz o modelo interno de dados para o modelo legado e trata incompatibilidades.")
+    Component(outbox_handler, "TransactionalOutboxHandler", "Spring Component / Scheduled", "Garante o envio assíncrono e resiliente das confirmações de reserva ao legado.")
+}
+
+ContainerDb(redis, "Redis", "Cache & Locks", "Armazena a trava (lock) do leito durante o processo de reserva.")
+ContainerDb(db_postgres, "PostgreSQL", "Main DB", "Persiste o estado do leito e a tabela de Outbox.")
+System_Ext(legado_leitos, "Sistema Legado de Leitos", "Base Legada")
+
+Rel(leitos_controller, leitos_service, "Chama método de alocação")
+Rel(leitos_service, lock_manager, "Solicita lock temporário do leito")
+Rel(lock_manager, redis, "Acquire Lock (Redlock)", "RESP")
+Rel(leitos_service, db_postgres, "Salva reserva local + registro no Outbox", "JDBC")
+Rel(leitos_service, acl_adapter, "Delega sincronização ao legado")
+Rel(acl_adapter, legado_leitos, "Atualiza estado do leito no sistema antigo", "SQL Direct / REST")
+Rel(outbox_handler, db_postgres, "Lê registros pendentes do Outbox", "JDBC")
+Rel(outbox_handler, acl_adapter, "Reenvia reservas em caso de falha temporária")
+
+@enduml
